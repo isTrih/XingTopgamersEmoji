@@ -10,6 +10,7 @@ import { palettes } from './palettes'
 import { useEmojiCanvas } from './useEmojiCanvas'
 import type { EditorState, Palette } from './types'
 import defaultLogoUrl from '../Logo.png'
+import { AvatarEditor } from './AvatarEditor'
 
 const PRESETS_PER_PAGE = 20
 
@@ -70,7 +71,7 @@ function RangeField({
   )
 }
 
-export function App() {
+function EmojiEditor() {
   const [state, setState] = useState<EditorState>(initialState)
   const [fontFamily, setFontFamily] = useState('XingEmojiDefault')
   const [fontName, setFontName] = useState('系统粗体')
@@ -187,7 +188,6 @@ export function App() {
   }
 
   return (
-    <main>
       <section className="studio-shell">
         <aside className="control-panel">
           <div className="panel-heading">
@@ -309,6 +309,21 @@ export function App() {
           </div>
         </section>
       </section>
+  )
+}
+
+export function App() {
+  const [activeTab, setActiveTab] = useState<'emoji' | 'avatar'>('emoji')
+
+  return (
+    <main>
+      <div className="app-workspace">
+        <nav className="editor-tabs" aria-label="编辑器类型">
+          <button className={activeTab === 'emoji' ? 'active' : ''} onClick={() => setActiveTab('emoji')}>表情编辑器</button>
+          <button className={activeTab === 'avatar' ? 'active' : ''} onClick={() => setActiveTab('avatar')}>头像编辑器</button>
+        </nav>
+        {activeTab === 'emoji' ? <EmojiEditor /> : <AvatarEditor />}
+      </div>
     </main>
   )
 }
