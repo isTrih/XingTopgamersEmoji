@@ -13,8 +13,18 @@ export interface AvatarEditorState {
   maskHeight: number
   arcDepth: number
   textColor: string
-  fontSize: number
+  topFontSize: number
+  topTextX: number
+  topTextY: number
+  bottomFontSize: number
+  bottomTextX: number
+  bottomTextY: number
   fontWeight: number
+}
+
+export interface AvatarFontFamilies {
+  top: string
+  bottom: string
 }
 
 export interface SquareCrop {
@@ -71,38 +81,41 @@ function drawCurvedText(
   curveY: (x: number) => number,
   direction: 'top' | 'bottom',
   state: AvatarEditorState,
+  fontFamily: string,
 ) {
   const label = text.trim()
   if (!label) return
 
+  const fontSize = Math.max(1, direction === 'top' ? state.topFontSize : state.bottomFontSize)
+  const textX = direction === 'top' ? state.topTextX : state.bottomTextX
+  const textY = direction === 'top' ? state.topTextY : state.bottomTextY
+
   context.save()
-  context.font = `${state.fontWeight} ${state.fontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
+  context.font = `${state.fontWeight} ${fontSize}px "${fontFamily}", "PingFang SC", "Microsoft YaHei", sans-serif`
   context.textAlign = 'center'
   context.textBaseline = 'middle'
   context.fillStyle = state.textColor
   context.strokeStyle = 'rgba(0, 0, 0, 0.28)'
-  context.lineWidth = Math.max(2, state.fontSize * 0.07)
+  context.lineWidth = Math.max(2, fontSize * 0.07)
   context.lineJoin = 'round'
   context.shadowColor = 'rgba(0, 0, 0, 0.22)'
   context.shadowBlur = 5
   context.shadowOffsetY = 2
 
-  const widths = Array.from(label, (character) => context.measureText(character).width + state.fontSize * 0.08)
+  const widths = Array.from(label, (character) => context.measureText(character).width + fontSize * 0.08)
   const naturalWidth = widths.reduce((sum, width) => sum + width, 0)
-  const scale = Math.min(1, AVATAR_SIZE * 0.78 / naturalWidth)
-  let cursor = (AVATAR_SIZE - naturalWidth * scale) / 2
+  let cursor = (AVATAR_SIZE - naturalWidth) / 2 + textX
 
   Array.from(label).forEach((character, index) => {
-    const characterWidth = widths[index] * scale
+    const characterWidth = widths[index]
     const x = cursor + characterWidth / 2
     const delta = 2
     const slope = (curveY(x + delta) - curveY(x - delta)) / (delta * 2)
-    const yOffset = direction === 'top' ? -state.fontSize * 0.62 : state.fontSize * 0.68
+    const yOffset = direction === 'top' ? -fontSize * 0.62 : fontSize * 0.68
 
     context.save()
-    context.translate(x, curveY(x) + yOffset)
+    context.translate(x, curveY(x) + yOffset + textY)
     context.rotate(Math.atan(slope))
-    context.scale(scale, scale)
     context.strokeText(character, 0, 0)
     context.fillText(character, 0, 0)
     context.restore()
@@ -138,6 +151,7 @@ export function renderAvatar(
   canvas: HTMLCanvasElement,
   image: HTMLImageElement | null,
   state: AvatarEditorState,
+  fonts: AvatarFontFamilies,
 ) {
   canvas.width = AVATAR_SIZE
   canvas.height = AVATAR_SIZE
@@ -189,6 +203,7 @@ export function renderAvatar(
       (x) => topCurveY(x, state.maskHeight, state.arcDepth),
       'top',
       state,
+      fonts.top,
     )
   }
   if (state.bottomEnabled) {
@@ -199,6 +214,7 @@ export function renderAvatar(
       (x) => bottomCurveY(x, state.maskHeight, state.arcDepth),
       'bottom',
       state,
+      fonts.bottom,
     )
   }
 }

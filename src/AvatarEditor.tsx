@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Download, ImagePlus, RotateCcw, Upload } from 'lucide-react'
-import { AVATAR_SIZE, type AvatarEditorState } from './avatarCanvas'
+import { AVATAR_SIZE, type AvatarEditorState, type AvatarFontFamilies } from './avatarCanvas'
 import { useAvatarCanvas } from './useAvatarCanvas'
 
 const initialState: AvatarEditorState = {
@@ -16,8 +16,18 @@ const initialState: AvatarEditorState = {
   maskHeight: 170,
   arcDepth: 48,
   textColor: '#FFFFFF',
-  fontSize: 42,
+  topFontSize: 42,
+  topTextX: 0,
+  topTextY: 0,
+  bottomFontSize: 42,
+  bottomTextX: 0,
+  bottomTextY: 0,
   fontWeight: 800,
+}
+
+const systemFonts: AvatarFontFamilies = {
+  top: 'XingAvatarSystemTop',
+  bottom: 'XingAvatarSystemBottom',
 }
 
 function RangeField({
@@ -66,12 +76,52 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
   )
 }
 
+function NumberField({
+  label,
+  value,
+  unit,
+  min,
+  onChange,
+}: {
+  label: string
+  value: number
+  unit: string
+  min?: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <label className="number-field">
+      <span>{label}</span>
+      <span className="number-input-wrap">
+        <input
+          type="number"
+          min={min}
+          step={1}
+          value={value}
+          onChange={(event) => {
+            const nextValue = Number(event.target.value)
+            if (Number.isFinite(nextValue)) onChange(min === undefined ? nextValue : Math.max(min, nextValue))
+          }}
+        />
+        <small>{unit}</small>
+      </span>
+    </label>
+  )
+}
+
 export function AvatarEditor() {
   const [state, setState] = useState<AvatarEditorState>(initialState)
   const [avatarImage, setAvatarImage] = useState<HTMLImageElement | null>(null)
   const [avatarName, setAvatarName] = useState('尚未上传')
+  const [fonts, setFonts] = useState<AvatarFontFamilies>(systemFonts)
+  const [topFontName, setTopFontName] = useState('系统字体')
+  const [bottomFontName, setBottomFontName] = useState('系统字体')
   const imageUrlRef = useRef<string | null>(null)
-  const canvasRef = useAvatarCanvas(avatarImage, state)
+  const topFontUrlRef = useRef<string | null>(null)
+  const bottomFontUrlRef = useRef<string | null>(null)
+  const topFontFaceRef = useRef<FontFace | null>(null)
+  const bottomFontFaceRef = useRef<FontFace | null>(null)
+  const canvasRef = useAvatarCanvas(avatarImage, state, fonts)
 
   const update = <K extends keyof AvatarEditorState>(key: K, value: AvatarEditorState[K]) => {
     setState((previous) => ({ ...previous, [key]: value }))
@@ -96,8 +146,37 @@ export function AvatarEditor() {
     image.src = url
   }
 
+  const handleFontUpload = async (position: 'top' | 'bottom', file?: File) => {
+    if (!file) return
+    const url = URL.createObjectURL(file)
+    const family = `XingAvatar-${position}-${Date.now()}`
+    const face = new FontFace(family, `url(${url})`)
+
+    try {
+      await face.load()
+      document.fonts.add(face)
+      const urlRef = position === 'top' ? topFontUrlRef : bottomFontUrlRef
+      const faceRef = position === 'top' ? topFontFaceRef : bottomFontFaceRef
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current)
+      if (faceRef.current) document.fonts.delete(faceRef.current)
+      urlRef.current = url
+      faceRef.current = face
+      setFonts((previous) => ({ ...previous, [position]: family }))
+      const name = file.name.replace(/\.[^.]+$/, '')
+      if (position === 'top') setTopFontName(name)
+      else setBottomFontName(name)
+    } catch {
+      URL.revokeObjectURL(url)
+      window.alert('字体读取失败，请上传 TTF、OTF、WOFF 或 WOFF2 字体。')
+    }
+  }
+
   useEffect(() => () => {
     if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current)
+    if (topFontUrlRef.current) URL.revokeObjectURL(topFontUrlRef.current)
+    if (bottomFontUrlRef.current) URL.revokeObjectURL(bottomFontUrlRef.current)
+    if (topFontFaceRef.current) document.fonts.delete(topFontFaceRef.current)
+    if (bottomFontFaceRef.current) document.fonts.delete(bottomFontFaceRef.current)
   }, [])
 
   const fileName = useMemo(() => {
@@ -114,7 +193,20 @@ export function AvatarEditor() {
     link.click()
   }
 
-  const reset = () => setState(initialState)
+  const reset = () => {
+    if (topFontUrlRef.current) URL.revokeObjectURL(topFontUrlRef.current)
+    if (bottomFontUrlRef.current) URL.revokeObjectURL(bottomFontUrlRef.current)
+    if (topFontFaceRef.current) document.fonts.delete(topFontFaceRef.current)
+    if (bottomFontFaceRef.current) document.fonts.delete(bottomFontFaceRef.current)
+    topFontUrlRef.current = null
+    bottomFontUrlRef.current = null
+    topFontFaceRef.current = null
+    bottomFontFaceRef.current = null
+    setState(initialState)
+    setFonts(systemFonts)
+    setTopFontName('系统字体')
+    setBottomFontName('系统字体')
+  }
 
   return (
     <section className="studio-shell">
@@ -173,7 +265,37 @@ export function AvatarEditor() {
 
           <div className="divider" />
           <div className="section-heading">文字样式</div>
-          <RangeField label="文字大小" value={state.fontSize} min={24} max={68} unit="px" onChange={(value) => update('fontSize', value)} />
+          <div className="field-group">
+            <span className="field-title">分别上传字体</span>
+            <div className="upload-grid">
+              <label className="upload-card">
+                <span className="upload-icon"><Upload size={18} /></span>
+                <span><strong>上方字体</strong><small title={topFontName}>{topFontName}</small></span>
+                <input type="file" accept=".ttf,.otf,.woff,.woff2,font/*" onChange={(event) => handleFontUpload('top', event.target.files?.[0])} />
+              </label>
+              <label className="upload-card">
+                <span className="upload-icon"><Upload size={18} /></span>
+                <span><strong>下方字体</strong><small title={bottomFontName}>{bottomFontName}</small></span>
+                <input type="file" accept=".ttf,.otf,.woff,.woff2,font/*" onChange={(event) => handleFontUpload('bottom', event.target.files?.[0])} />
+              </label>
+            </div>
+          </div>
+          <div className="text-layout-card">
+            <strong>上方文字</strong>
+            <div className="number-field-grid">
+              <NumberField label="字号（无上限）" value={state.topFontSize} min={1} unit="px" onChange={(value) => update('topFontSize', value)} />
+              <NumberField label="横向位置" value={state.topTextX} unit="px" onChange={(value) => update('topTextX', value)} />
+              <NumberField label="纵向位置" value={state.topTextY} unit="px" onChange={(value) => update('topTextY', value)} />
+            </div>
+          </div>
+          <div className="text-layout-card">
+            <strong>下方文字</strong>
+            <div className="number-field-grid">
+              <NumberField label="字号（无上限）" value={state.bottomFontSize} min={1} unit="px" onChange={(value) => update('bottomFontSize', value)} />
+              <NumberField label="横向位置" value={state.bottomTextX} unit="px" onChange={(value) => update('bottomTextX', value)} />
+              <NumberField label="纵向位置" value={state.bottomTextY} unit="px" onChange={(value) => update('bottomTextY', value)} />
+            </div>
+          </div>
           <RangeField label="文字粗细" value={state.fontWeight} min={400} max={900} step={100} onChange={(value) => update('fontWeight', value)} />
         </div>
       </aside>
