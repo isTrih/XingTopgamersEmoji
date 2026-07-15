@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Download, ImagePlus, RotateCcw, Upload } from 'lucide-react'
 import { AVATAR_SIZE, type AvatarEditorState, type AvatarFontFamilies } from './avatarCanvas'
 import { AvatarCropSelector } from './AvatarCropSelector'
+import { FontSelect } from './FontSelect'
+import { useBuiltInFonts } from './builtInFonts'
 import { useAvatarCanvas } from './useAvatarCanvas'
 
 const initialState: AvatarEditorState = {
@@ -122,6 +124,7 @@ export function AvatarEditor() {
   const bottomFontUrlRef = useRef<string | null>(null)
   const topFontFaceRef = useRef<FontFace | null>(null)
   const bottomFontFaceRef = useRef<FontFace | null>(null)
+  const availableFonts = useBuiltInFonts()
   const canvasRef = useAvatarCanvas(avatarImage, state, fonts)
 
   const update = <K extends keyof AvatarEditorState>(key: K, value: AvatarEditorState[K]) => {
@@ -268,7 +271,7 @@ export function AvatarEditor() {
               <input className="text-input" maxLength={16} value={state.bottomText} onChange={(event) => update('bottomText', event.target.value)} placeholder="输入下方文字" />
             </label>
           )}
-          <RangeField label="遮罩高度" value={state.maskHeight} min={100} max={250} unit="px" onChange={(value) => update('maskHeight', value)} />
+          <NumberField label="遮罩高度（无上限）" value={state.maskHeight} min={0} unit="px" onChange={(value) => update('maskHeight', value)} />
           <RangeField label="弧形深度" value={state.arcDepth} min={0} max={90} unit="px" onChange={(value) => update('arcDepth', value)} />
           <RangeField label="遮罩透明度" value={state.maskOpacity} min={0.2} max={1} step={0.05} onChange={(value) => update('maskOpacity', value)} />
           <div className="color-grid">
@@ -278,6 +281,32 @@ export function AvatarEditor() {
 
           <div className="divider" />
           <div className="section-heading">文字样式</div>
+          <div className="font-select-grid">
+            <FontSelect
+              label="上方内置字体"
+              value={fonts.top}
+              systemFamily={systemFonts.top}
+              systemName="系统字体"
+              currentName={topFontName}
+              fonts={availableFonts}
+              onChange={(family, name) => {
+                setFonts((previous) => ({ ...previous, top: family }))
+                setTopFontName(name)
+              }}
+            />
+            <FontSelect
+              label="下方内置字体"
+              value={fonts.bottom}
+              systemFamily={systemFonts.bottom}
+              systemName="系统字体"
+              currentName={bottomFontName}
+              fonts={availableFonts}
+              onChange={(family, name) => {
+                setFonts((previous) => ({ ...previous, bottom: family }))
+                setBottomFontName(name)
+              }}
+            />
+          </div>
           <div className="field-group">
             <span className="field-title">分别上传字体</span>
             <div className="upload-grid">

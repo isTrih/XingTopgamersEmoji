@@ -11,6 +11,8 @@ import { useEmojiCanvas } from './useEmojiCanvas'
 import type { EditorState, Palette } from './types'
 import defaultLogoUrl from '../Logo.png'
 import { AvatarEditor } from './AvatarEditor'
+import { FontSelect } from './FontSelect'
+import { useBuiltInFonts } from './builtInFonts'
 
 const PRESETS_PER_PAGE = 20
 
@@ -83,6 +85,7 @@ function EmojiEditor() {
   const [presetPage, setPresetPage] = useState(0)
   const fontUrlRef = useRef<string | null>(null)
   const logoUrlRef = useRef<string | null>(null)
+  const availableFonts = useBuiltInFonts()
   const { canvasRef, outputWidth } = useEmojiCanvas(state, fontFamily, logoImage)
   const categoryPalettes = useMemo(() => palettes.filter((palette) => palette.kind === presetKind), [presetKind])
   const filteredPalettes = useMemo(() => {
@@ -214,6 +217,18 @@ function EmojiEditor() {
 
             <div className="field-group">
               <span className="field-title">自定义素材</span>
+              <FontSelect
+                label="内置字体"
+                value={fontFamily}
+                systemFamily="XingEmojiDefault"
+                systemName="系统粗体"
+                currentName={fontName}
+                fonts={availableFonts}
+                onChange={(family, name) => {
+                  setFontFamily(family)
+                  setFontName(name)
+                }}
+              />
               <div className="upload-grid">
                 <label className="upload-card">
                   <span className="upload-icon"><Upload size={18} /></span>
