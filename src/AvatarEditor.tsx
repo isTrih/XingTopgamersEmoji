@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Download, ImagePlus, RotateCcw, Upload } from 'lucide-react'
 import { AVATAR_SIZE, type AvatarEditorState, type AvatarFontFamilies } from './avatarCanvas'
+import { AvatarCropSelector } from './AvatarCropSelector'
 import { useAvatarCanvas } from './useAvatarCanvas'
 
 const initialState: AvatarEditorState = {
@@ -224,12 +225,24 @@ export function AvatarEditor() {
               <Upload size={15} />
               <input type="file" accept="image/*" onChange={(event) => handleUpload(event.target.files?.[0])} />
             </label>
-            <small className="field-hint">图片会自动铺满并裁切为 1:1 正方形</small>
+            <small className="field-hint">上传后可在原图上拖动并缩放正方形选区</small>
           </div>
 
+          {avatarImage && (
+            <>
+              <div className="divider" />
+              <div className="section-heading">可视化裁切</div>
+              <AvatarCropSelector
+                image={avatarImage}
+                value={{ zoom: state.zoom, positionX: state.positionX, positionY: state.positionY }}
+                onChange={(crop) => setState((previous) => ({ ...previous, ...crop }))}
+              />
+            </>
+          )}
+
           <div className="divider" />
-          <div className="section-heading">裁切位置</div>
-          <RangeField label="缩放" value={state.zoom} min={1} max={3} step={0.05} unit="×" onChange={(value) => update('zoom', value)} />
+          <div className="section-heading">裁切精细调节</div>
+          <RangeField label="缩放" value={state.zoom} min={1} max={10} step={0.05} unit="×" onChange={(value) => update('zoom', value)} />
           <RangeField label="水平位置" value={state.positionX} min={-100} max={100} unit="%" onChange={(value) => update('positionX', value)} />
           <RangeField label="垂直位置" value={state.positionY} min={-100} max={100} unit="%" onChange={(value) => update('positionY', value)} />
 
