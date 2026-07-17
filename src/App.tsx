@@ -10,6 +10,9 @@ import { palettes } from './palettes'
 import { useEmojiCanvas } from './useEmojiCanvas'
 import type { EditorState, Palette } from './types'
 import defaultLogoUrl from '../Logo.png'
+import { AvatarEditor } from './AvatarEditor'
+import { FontSelect } from './FontSelect'
+import { useBuiltInFonts } from './builtInFonts'
 
 const PRESETS_PER_PAGE = 20
 
@@ -70,7 +73,7 @@ function RangeField({
   )
 }
 
-export function App() {
+function EmojiEditor() {
   const [state, setState] = useState<EditorState>(initialState)
   const [fontFamily, setFontFamily] = useState('XingEmojiDefault')
   const [fontName, setFontName] = useState('系统粗体')
@@ -82,6 +85,7 @@ export function App() {
   const [presetPage, setPresetPage] = useState(0)
   const fontUrlRef = useRef<string | null>(null)
   const logoUrlRef = useRef<string | null>(null)
+  const availableFonts = useBuiltInFonts()
   const { canvasRef, outputWidth } = useEmojiCanvas(state, fontFamily, logoImage)
   const categoryPalettes = useMemo(() => palettes.filter((palette) => palette.kind === presetKind), [presetKind])
   const filteredPalettes = useMemo(() => {
@@ -187,7 +191,6 @@ export function App() {
   }
 
   return (
-    <main>
       <section className="studio-shell">
         <aside className="control-panel">
           <div className="panel-heading">
@@ -214,6 +217,18 @@ export function App() {
 
             <div className="field-group">
               <span className="field-title">自定义素材</span>
+              <FontSelect
+                label="内置字体"
+                value={fontFamily}
+                systemFamily="XingEmojiDefault"
+                systemName="系统粗体"
+                currentName={fontName}
+                fonts={availableFonts}
+                onChange={(family, name) => {
+                  setFontFamily(family)
+                  setFontName(name)
+                }}
+              />
               <div className="upload-grid">
                 <label className="upload-card">
                   <span className="upload-icon"><Upload size={18} /></span>
@@ -309,6 +324,21 @@ export function App() {
           </div>
         </section>
       </section>
+  )
+}
+
+export function App() {
+  const [activeTab, setActiveTab] = useState<'emoji' | 'avatar'>('emoji')
+
+  return (
+    <main>
+      <div className="app-workspace">
+        <nav className="editor-tabs" aria-label="编辑器类型">
+          <button className={activeTab === 'emoji' ? 'active' : ''} onClick={() => setActiveTab('emoji')}>表情编辑器</button>
+          <button className={activeTab === 'avatar' ? 'active' : ''} onClick={() => setActiveTab('avatar')}>头像编辑器</button>
+        </nav>
+        {activeTab === 'emoji' ? <EmojiEditor /> : <AvatarEditor />}
+      </div>
     </main>
   )
 }
