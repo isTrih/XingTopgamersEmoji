@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Download, ImagePlus, RotateCcw, Upload } from 'lucide-react'
+import { Download, ImagePlus, RotateCcw, Save, Upload } from 'lucide-react'
 import { AVATAR_SIZE, type AvatarEditorState, type AvatarFontFamilies } from './avatarCanvas'
 import { AvatarCropSelector } from './AvatarCropSelector'
 import { FontSelect } from './FontSelect'
 import { useBuiltInFonts } from './builtInFonts'
 import { useAvatarCanvas } from './useAvatarCanvas'
+import { canvasToPngBlob, useHistorySaveStatus, type SaveCreationInput } from './useCreationHistory'
+import { usePersistentState } from './usePersistentState'
 
 const initialState: AvatarEditorState = {
   zoom: 1,
@@ -112,8 +114,9 @@ function NumberField({
   )
 }
 
-export function AvatarEditor() {
-  const [state, setState] = useState<AvatarEditorState>(initialState)
+export function AvatarEditor({ onSaveHistory }: { onSaveHistory: (item: SaveCreationInput) => Promise<boolean> }) {
+  const [state, setState] = usePersistentState<AvatarEditorState>('xingemoji:settings:avatar:v1', initialState)
+  const [preferredFonts, setPreferredFonts] = usePersistentState<AvatarFontFamilies>('xingemoji:settings:avatar-fonts:v1', systemFonts)
   const [avatarImage, setAvatarImage] = useState<HTMLImageElement | null>(null)
   const [avatarName, setAvatarName] = useState('尚未上传')
   const [fonts, setFonts] = useState<AvatarFontFamilies>(systemFonts)
@@ -125,7 +128,26 @@ export function AvatarEditor() {
   const topFontFaceRef = useRef<FontFace | null>(null)
   const bottomFontFaceRef = useRef<FontFace | null>(null)
   const availableFonts = useBuiltInFonts()
+  const historySave = useHistorySaveStatus()
   const canvasRef = useAvatarCanvas(avatarImage, state, fonts)
+
+  useEffect(() => {
+    const resolveFont = (family: string, systemFamily: string) => {
+      if (family === systemFamily) return { family: systemFamily, name: '系统字体' }
+      const builtIn = availableFonts.find((font) => font.family === family)
+      return builtIn ? { family: builtIn.family, name: builtIn.name } : null
+    }
+    const top = resolveFont(preferredFonts.top, systemFonts.top)
+    const bottom = resolveFont(preferredFonts.bottom, systemFonts.bottom)
+    if (top && !topFontFaceRef.current) {
+      setFonts((previous) => ({ ...previous, top: top.family }))
+      setTopFontName(top.name)
+    }
+    if (bottom && !bottomFontFaceRef.current) {
+      setFonts((previous) => ({ ...previous, bottom: bottom.family }))
+      setBottomFontName(bottom.name)
+    }
+  }, [availableFonts, preferredFonts])
 
   const update = <K extends keyof AvatarEditorState>(key: K, value: AvatarEditorState[K]) => {
     setState((previous) => ({ ...previous, [key]: value }))
@@ -197,6 +219,25 @@ export function AvatarEditor() {
     link.click()
   }
 
+  const saveToHistory = () => {
+    const canvas = canvasRef.current
+    if (!canvas || !avatarImage) return
+    historySave.run(async () => {
+      try {
+        const blob = await canvasToPngBlob(canvas)
+        return await onSaveHistory({
+          kind: 'avatar',
+          name: fileName,
+          width: canvas.width,
+          height: canvas.height,
+          blob,
+        })
+      } catch {
+        return false
+      }
+    })
+  }
+
   const reset = () => {
     if (topFontUrlRef.current) URL.revokeObjectURL(topFontUrlRef.current)
     if (bottomFontUrlRef.current) URL.revokeObjectURL(bottomFontUrlRef.current)
@@ -208,6 +249,7 @@ export function AvatarEditor() {
     bottomFontFaceRef.current = null
     setState(initialState)
     setFonts(systemFonts)
+    setPreferredFonts(systemFonts)
     setTopFontName('系统字体')
     setBottomFontName('系统字体')
   }
@@ -291,6 +333,7 @@ export function AvatarEditor() {
               fonts={availableFonts}
               onChange={(family, name) => {
                 setFonts((previous) => ({ ...previous, top: family }))
+                setPreferredFonts((previous) => ({ ...previous, top: family }))
                 setTopFontName(name)
               }}
             />
@@ -303,6 +346,7 @@ export function AvatarEditor() {
               fonts={availableFonts}
               onChange={(family, name) => {
                 setFonts((previous) => ({ ...previous, bottom: family }))
+                setPreferredFonts((previous) => ({ ...previous, bottom: family }))
                 setBottomFontName(name)
               }}
             />
@@ -355,7 +399,13 @@ export function AvatarEditor() {
         </div>
         <div className="export-row avatar-export-row">
           {!avatarImage && <span>上传图片后即可导出</span>}
-          <button className="download-button" disabled={!avatarImage} onClick={download}><Download size={18} /> 导出头像 PNG</button>
+          <div className="export-actions">
+            <button className="history-save-button" disabled={!avatarImage || historySave.status === 'saving'} onClick={saveToHistory}>
+              <Save size={17} />
+              {historySave.status === 'saving' ? '保存中…' : historySave.status === 'saved' ? '已保存' : historySave.status === 'error' ? '保存失败' : '保存到历史'}
+            </button>
+            <button className="download-button" disabled={!avatarImage} onClick={download}><Download size={18} /> 导出头像 PNG</button>
+          </div>
         </div>
       </section>
     </section>

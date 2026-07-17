@@ -4,6 +4,7 @@ import {
   Download,
   ImagePlus,
   RotateCcw,
+  Save,
   Upload,
 } from 'lucide-react'
 import { palettes } from './palettes'
@@ -13,6 +14,9 @@ import defaultLogoUrl from '../Logo.png'
 import { AvatarEditor } from './AvatarEditor'
 import { FontSelect } from './FontSelect'
 import { useBuiltInFonts } from './builtInFonts'
+import { HistoryPanel } from './HistoryPanel'
+import { canvasToPngBlob, useCreationHistory, useHistorySaveStatus, type SaveCreationInput } from './useCreationHistory'
+import { usePersistentState } from './usePersistentState'
 
 const PRESETS_PER_PAGE = 20
 
@@ -73,8 +77,9 @@ function RangeField({
   )
 }
 
-function EmojiEditor() {
-  const [state, setState] = useState<EditorState>(initialState)
+function EmojiEditor({ onSaveHistory }: { onSaveHistory: (item: SaveCreationInput) => Promise<boolean> }) {
+  const [state, setState] = usePersistentState<EditorState>('xingemoji:settings:emoji:v1', initialState)
+  const [preferredFontFamily, setPreferredFontFamily] = usePersistentState('xingemoji:settings:emoji-font:v1', 'XingEmojiDefault')
   const [fontFamily, setFontFamily] = useState('XingEmojiDefault')
   const [fontName, setFontName] = useState('系统粗体')
   const [logoImage, setLogoImage] = useState<HTMLImageElement | null>(null)
@@ -86,6 +91,7 @@ function EmojiEditor() {
   const fontUrlRef = useRef<string | null>(null)
   const logoUrlRef = useRef<string | null>(null)
   const availableFonts = useBuiltInFonts()
+  const historySave = useHistorySaveStatus()
   const { canvasRef, outputWidth } = useEmojiCanvas(state, fontFamily, logoImage)
   const categoryPalettes = useMemo(() => palettes.filter((palette) => palette.kind === presetKind), [presetKind])
   const filteredPalettes = useMemo(() => {
@@ -118,6 +124,19 @@ function EmojiEditor() {
     }
     image.src = defaultLogoUrl
   }, [])
+
+  useEffect(() => {
+    if (preferredFontFamily === 'XingEmojiDefault') {
+      setFontFamily('XingEmojiDefault')
+      setFontName('系统粗体')
+      return
+    }
+    const font = availableFonts.find((item) => item.family === preferredFontFamily)
+    if (font && !fontUrlRef.current) {
+      setFontFamily(font.family)
+      setFontName(font.name)
+    }
+  }, [availableFonts, preferredFontFamily])
 
   const update = <K extends keyof EditorState>(key: K, value: EditorState[K]) => {
     setState((previous) => ({ ...previous, [key]: value }))
@@ -182,9 +201,29 @@ function EmojiEditor() {
     link.click()
   }
 
+  const saveToHistory = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    historySave.run(async () => {
+      try {
+        const blob = await canvasToPngBlob(canvas)
+        return await onSaveHistory({
+          kind: 'emoji',
+          name: downloadName,
+          width: canvas.width,
+          height: canvas.height,
+          blob,
+        })
+      } catch {
+        return false
+      }
+    })
+  }
+
   const reset = () => {
     setState(initialState)
     setFontFamily('XingEmojiDefault')
+    setPreferredFontFamily('XingEmojiDefault')
     setFontName('系统粗体')
     setLogoImage(defaultLogoImage)
     setLogoName('Logo.png')
@@ -226,6 +265,7 @@ function EmojiEditor() {
                 fonts={availableFonts}
                 onChange={(family, name) => {
                   setFontFamily(family)
+                  setPreferredFontFamily(family)
                   setFontName(name)
                 }}
               />
@@ -320,6 +360,10 @@ function EmojiEditor() {
             </div>
           </div>
           <div className="export-row">
+            <button className="history-save-button" disabled={historySave.status === 'saving'} onClick={saveToHistory}>
+              <Save size={17} />
+              {historySave.status === 'saving' ? '保存中…' : historySave.status === 'saved' ? '已保存' : historySave.status === 'error' ? '保存失败' : '保存到历史'}
+            </button>
             <button className="download-button" onClick={download}><Download size={18} /> 导出 PNG</button>
           </div>
         </section>
@@ -328,7 +372,16 @@ function EmojiEditor() {
 }
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'emoji' | 'avatar'>('emoji')
+  const [activeTab, setActiveTab] = useState<'emoji' | 'avatar' | 'history'>('emoji')
+  const history = useCreationHistory()
+
+  const removeHistory = (id: string) => {
+    history.remove(id)
+  }
+
+  const clearHistory = () => {
+    if (window.confirm('确定清空所有表情包和头像历史吗？此操作无法撤销。')) history.clear()
+  }
 
   return (
     <main>
@@ -336,8 +389,19 @@ export function App() {
         <nav className="editor-tabs" aria-label="编辑器类型">
           <button className={activeTab === 'emoji' ? 'active' : ''} onClick={() => setActiveTab('emoji')}>表情编辑器</button>
           <button className={activeTab === 'avatar' ? 'active' : ''} onClick={() => setActiveTab('avatar')}>头像编辑器</button>
+          <button className={activeTab === 'history' ? 'active' : ''} onClick={() => setActiveTab('history')}>历史记录{history.items.length > 0 ? ` ${history.items.length}` : ''}</button>
         </nav>
-        {activeTab === 'emoji' ? <EmojiEditor /> : <AvatarEditor />}
+        {activeTab === 'emoji' && <EmojiEditor onSaveHistory={history.save} />}
+        {activeTab === 'avatar' && <AvatarEditor onSaveHistory={history.save} />}
+        {activeTab === 'history' && (
+          <HistoryPanel
+            items={history.items}
+            loading={history.loading}
+            error={history.error}
+            onRemove={removeHistory}
+            onClear={clearHistory}
+          />
+        )}
       </div>
     </main>
   )
